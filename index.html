@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>İşlem Günlüğü · Kâr Zarar Hesaplayıcı</title>
-<meta name="description" content="İşlemlerini gir, kâr zarar, kazanma oranı ve istatistiklerini anında gör. Ücretsiz, kayıt yok, veriler yalnız senin cihazında.">
+<meta name="description" content="Spot ve kaldıraçlı işlemlerini gir, kâr zarar, kazanma oranı ve istatistiklerini anında gör. Ücretsiz, kayıt yok.">
 <meta property="og:title" content="İşlem Günlüğü · Kâr Zarar Hesaplayıcı">
-<meta property="og:description" content="İşlemlerini gir, kâr zarar ve kazanma oranını anında gör. Ücretsiz, kayıt yok.">
+<meta property="og:description" content="Spot ve kaldıraçlı işlemlerinin kâr zararını ve kazanma oranını anında gör. Ücretsiz, kayıt yok.">
 <meta name="theme-color" content="#0f1115">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
@@ -23,6 +23,9 @@ h1{font-size:20px;margin:4px 0 2px}
 .ist b{display:block;font-size:18px;margin-top:2px}
 .ist span{color:var(--soluk);font-size:12px}
 .pos{color:var(--yesil)}.neg{color:var(--kirmizi)}
+.sekme{display:flex;gap:6px;margin-bottom:12px}
+.sekme button{flex:1;background:#11141a;color:var(--soluk);border:1px solid var(--cizgi);font-weight:600}
+.sekme button.aktif{background:var(--sari);color:#111;border-color:var(--sari)}
 form{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 @media(min-width:560px){form{grid-template-columns:repeat(3,1fr)}}
 label{font-size:12px;color:var(--soluk);display:flex;flex-direction:column;gap:4px}
@@ -30,21 +33,31 @@ input,select{background:#11141a;border:1px solid var(--cizgi);color:var(--yazi);
 button{background:var(--sari);color:#111;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:15px;cursor:pointer}
 button.ikinci{background:#262a33;color:var(--yazi);font-weight:600}
 .tam{grid-column:1/-1}
+.gizli{display:none!important}
 .sira{display:flex;gap:8px;flex-wrap:wrap}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{padding:7px 4px;border-bottom:1px solid var(--cizgi);text-align:right;white-space:nowrap}
-th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th:nth-child(-n+3),td:nth-child(-n+3){text-align:left}
 .tablo{overflow-x:auto}
+.etiket{font-size:11px;padding:2px 6px;border-radius:6px;background:#262a33;color:var(--soluk)}
+.etiket.k{background:#3a2a10;color:var(--sari)}
 .sil{background:none;color:var(--soluk);padding:2px 6px;font-weight:400}
 canvas{width:100%;height:170px}
 .not{color:var(--soluk);font-size:12px;line-height:1.5}
+.uyari{color:var(--sari);font-size:12px;margin-top:2px}
 a{color:var(--sari)}
 </style>
 </head>
 <body>
 <div class="kap">
 <h1>📒 İşlem Günlüğü</h1>
-<div class="alt">İşlemlerini gir, kâr zarar ve istatistiklerin anında hesaplansın. Kayıt yok, veriler yalnız bu cihazda kalır.</div>
+<div class="alt">Spot ve kaldıraçlı işlemlerini gir, kâr zarar ve istatistiklerin anında hesaplansın. Kayıt yok.</div>
+
+<div class="sekme" id="filtre">
+<button data-f="hepsi" class="aktif">Tümü</button>
+<button data-f="spot">Spot</button>
+<button data-f="kaldirac">Kaldıraçlı</button>
+</div>
 
 <div class="kart">
 <div class="izgara">
@@ -56,6 +69,10 @@ a{color:var(--sari)}
 <div class="ist"><span>Ort. kayıp</span><b id="sOrtZ" class="neg">0</b></div>
 <div class="ist"><span>En iyi işlem</span><b id="sEnIyi">-</b></div>
 <div class="ist"><span>En kötü işlem</span><b id="sEnKotu">-</b></div>
+<div class="ist"><span>Spot kâr/zarar</span><b id="sSpot">0</b></div>
+<div class="ist"><span>Kaldıraçlı kâr/zarar</span><b id="sKald">0</b></div>
+<div class="ist"><span>Ödenen ücret</span><b id="sUcret">0</b></div>
+<div class="ist"><span>Ort. kaldıraç</span><b id="sOrtX">-</b></div>
 </div>
 </div>
 
@@ -66,14 +83,18 @@ a{color:var(--sari)}
 
 <div class="kart">
 <form id="form">
+<label>İşlem türü<select id="tur"><option value="spot">Spot</option><option value="kaldirac">Kaldıraçlı (vadeli)</option></select></label>
 <label>Tarih<input type="date" id="tarih" required></label>
 <label>Varlık<input id="varlik" placeholder="BTC" required maxlength="12"></label>
-<label>Yön<select id="yon"><option value="long">Long (al, sonra sat)</option><option value="short">Short (sat, sonra al)</option></select></label>
+<label class="kald gizli">Yön<select id="yon"><option value="long">Long</option><option value="short">Short</option></select></label>
+<label class="kald gizli">Kaldıraç (x)<input id="kaldirac" type="number" step="any" min="1" value="1" inputmode="decimal"></label>
 <label>Giriş fiyatı<input id="giris" type="number" step="any" min="0" required inputmode="decimal"></label>
 <label>Çıkış fiyatı<input id="cikis" type="number" step="any" min="0" required inputmode="decimal"></label>
 <label>Miktar (adet)<input id="miktar" type="number" step="any" min="0" required inputmode="decimal"></label>
-<label>Toplam ücret<input id="ucret" type="number" step="any" min="0" value="0" inputmode="decimal"></label>
+<label>İşlem ücreti<input id="ucret" type="number" step="any" min="0" value="0" inputmode="decimal"></label>
+<label class="kald gizli">Fonlama (ödenen +, alınan -)<input id="fonlama" type="number" step="any" value="0" inputmode="decimal"></label>
 <label class="tam">Not (isteğe bağlı)<input id="not" maxlength="80" placeholder="Neden girdim, ne öğrendim?"></label>
+<div class="tam uyari kald gizli">Kaldıraçta miktar = pozisyonun tamamı (teminat değil). % sütunu teminata göre getiridir.</div>
 <button class="tam" type="submit">İşlemi ekle</button>
 </form>
 </div>
@@ -86,54 +107,62 @@ a{color:var(--sari)}
 <button class="ikinci" id="temizle">Hepsini sil</button>
 </div>
 <div class="tablo"><table>
-<thead><tr><th>Tarih</th><th>Varlık</th><th>Yön</th><th>Giriş</th><th>Çıkış</th><th>K/Z</th><th>%</th><th></th></tr></thead>
-<tbody id="liste"><tr><td colspan="8" class="not">Henüz işlem yok. İlk işlemini yukarıdan ekle.</td></tr></tbody>
+<thead><tr><th>Tarih</th><th>Varlık</th><th>Tür</th><th>Giriş</th><th>Çıkış</th><th>K/Z</th><th>%</th><th></th></tr></thead>
+<tbody id="liste"></tbody>
 </table></div>
 </div>
 
 <div class="not">
-Bu araç yalnız senin girdiğin geçmiş işlemleri hesaplar. Yatırım tavsiyesi değildir, al-sat önerisi vermez. Veriler bizim sunucumuza gönderilmez; tarayıcında, Telegram içinde açtıysan Telegram hesabının kendi depolamasında durur; tarayıcı verilerini silersen kaybolur, CSV indirerek yedekle.<br>
+Bu araç yalnız senin girdiğin geçmiş işlemleri hesaplar. Yatırım tavsiyesi değildir, al-sat önerisi vermez. Kaldıraçlı işlemler yüksek risk taşır ve teminatın tamamını kaybettirebilir.<br>
+Veriler bizim sunucumuza gönderilmez; tarayıcında, Telegram içinde açtıysan Telegram hesabının kendi depolamasında durur. CSV indirerek yedekle.<br>
 Kriptoyu sıfırdan öğrenmek için: <a href="https://dogukanlive.com" target="_blank" rel="noopener">dogukanlive.com</a>
 </div>
 </div>
 
 <script>
 const ANAHTAR="islem_gunlugu_v1";
-let islemler=JSON.parse(localStorage.getItem(ANAHTAR)||"[]");
+const duzelt=t=>({kaldirac:1,fonlama:0,...t,tur:t.tur||(t.yon==="short"?"kaldirac":"spot")});
+let islemler=JSON.parse(localStorage.getItem(ANAHTAR)||"[]").map(duzelt);
+let filtre="hepsi";
 const TG=window.Telegram&&Telegram.WebApp&&Telegram.WebApp.initData?Telegram.WebApp:null;
 const BULUT=TG&&TG.CloudStorage&&TG.isVersionAtLeast&&TG.isVersionAtLeast("6.9")?TG.CloudStorage:null;
 if(TG){TG.ready();TG.expand();}
+const $=id=>document.getElementById(id);
+const sayi=n=>(Math.round(n*100)/100).toLocaleString("tr-TR",{maximumFractionDigits:2});
+const kz=t=>{const fark=(t.tur==="kaldirac"&&t.yon==="short")?(t.giris-t.cikis):(t.cikis-t.giris);return fark*t.miktar-(t.ucret||0)-(t.tur==="kaldirac"?(t.fonlama||0):0)};
+const yuzde=t=>{const x=t.tur==="kaldirac"?Math.max(1,t.kaldirac||1):1;const teminat=t.giris*t.miktar/x;return teminat>0?kz(t)/teminat*100:0};
 function bulutaYaz(){if(!BULUT)return;const j=JSON.stringify(islemler),p=[];for(let i=0;i<j.length;i+=3800)p.push(j.slice(i,i+3800));
   BULUT.setItem("ig_n",String(p.length));p.forEach((x,i)=>BULUT.setItem("ig_"+i,x));}
 function buluttanOku(){if(!BULUT)return;BULUT.getItem("ig_n",(e,n)=>{n=+n||0;if(e||!n)return;const k=[...Array(n).keys()].map(i=>"ig_"+i);
-  BULUT.getItems(k,(e2,v)=>{if(e2)return;try{const b=JSON.parse(k.map(x=>v[x]||"").join(""));if(Array.isArray(b)&&b.length>=islemler.length){islemler=b;localStorage.setItem(ANAHTAR,JSON.stringify(b));ciz()}}catch(_){}})})}
-const $=id=>document.getElementById(id);
-const sayi=n=>(Math.round(n*100)/100).toLocaleString("tr-TR",{maximumFractionDigits:2});
-const kz=t=>{const fark=t.yon==="short"?(t.giris-t.cikis):(t.cikis-t.giris);return fark*t.miktar-(t.ucret||0)};
-const yuzde=t=>{const m=t.giris*t.miktar;return m>0?kz(t)/m*100:0};
+  BULUT.getItems(k,(e2,v)=>{if(e2)return;try{const b=JSON.parse(k.map(x=>v[x]||"").join(""));if(Array.isArray(b)&&b.length>=islemler.length){islemler=b.map(duzelt);localStorage.setItem(ANAHTAR,JSON.stringify(islemler));ciz()}}catch(_){}})})}
 function kaydet(){localStorage.setItem(ANAHTAR,JSON.stringify(islemler));bulutaYaz();ciz()}
 function renk(el,v){el.classList.remove("pos","neg");if(v>0)el.classList.add("pos");if(v<0)el.classList.add("neg")}
+function yaz(id,v){$(id).textContent=sayi(v);renk($(id),v)}
 function ciz(){
-  const sirali=[...islemler].sort((a,b)=>a.tarih<b.tarih?-1:a.tarih>b.tarih?1:a.id-b.id);
-  const sonuc=sirali.map(kz);
-  const top=sonuc.reduce((a,b)=>a+b,0);
+  const tum=[...islemler].sort((a,b)=>a.tarih<b.tarih?-1:a.tarih>b.tarih?1:a.id-b.id);
+  const sirali=filtre==="hepsi"?tum:tum.filter(t=>t.tur===filtre);
+  const sonuc=sirali.map(kz),top=sonuc.reduce((a,b)=>a+b,0);
   const kaz=sonuc.filter(x=>x>0),kay=sonuc.filter(x=>x<0);
-  $("sToplam").textContent=sayi(top);renk($("sToplam"),top);
+  yaz("sToplam",top);
   $("sSayi").textContent=sonuc.length;
   $("sOran").textContent="%"+(sonuc.length?Math.round(kaz.length/sonuc.length*100):0);
   const tk=kaz.reduce((a,b)=>a+b,0),tz=Math.abs(kay.reduce((a,b)=>a+b,0));
   $("sFaktor").textContent=tz>0?sayi(tk/tz):(tk>0?"∞":"-");
   $("sOrtK").textContent=kaz.length?sayi(tk/kaz.length):"0";
   $("sOrtZ").textContent=kay.length?sayi(-tz/kay.length):"0";
-  if(sonuc.length){
-    let iyi=0,kotu=0;sonuc.forEach((v,i)=>{if(v>sonuc[iyi])iyi=i;if(v<sonuc[kotu])kotu=i});
+  if(sonuc.length){let iyi=0,kotu=0;sonuc.forEach((v,i)=>{if(v>sonuc[iyi])iyi=i;if(v<sonuc[kotu])kotu=i});
     $("sEnIyi").textContent=sirali[iyi].varlik+" "+sayi(sonuc[iyi]);renk($("sEnIyi"),sonuc[iyi]);
     $("sEnKotu").textContent=sirali[kotu].varlik+" "+sayi(sonuc[kotu]);renk($("sEnKotu"),sonuc[kotu]);
-  }else{$("sEnIyi").textContent="-";$("sEnKotu").textContent="-"}
+  }else{$("sEnIyi").textContent="-";$("sEnKotu").textContent="-";renk($("sEnIyi"),0);renk($("sEnKotu"),0)}
+  yaz("sSpot",tum.filter(t=>t.tur==="spot").map(kz).reduce((a,b)=>a+b,0));
+  yaz("sKald",tum.filter(t=>t.tur==="kaldirac").map(kz).reduce((a,b)=>a+b,0));
+  $("sUcret").textContent=sayi(sirali.reduce((a,t)=>a+(t.ucret||0)+(t.tur==="kaldirac"?Math.max(0,t.fonlama||0):0),0));
+  const kl=sirali.filter(t=>t.tur==="kaldirac");$("sOrtX").textContent=kl.length?sayi(kl.reduce((a,t)=>a+(t.kaldirac||1),0)/kl.length)+"x":"-";
   const tb=$("liste");
-  if(!sirali.length){tb.innerHTML='<tr><td colspan="8" class="not">Henüz işlem yok. İlk işlemini yukarıdan ekle.</td></tr>'}
+  if(!sirali.length){tb.innerHTML='<tr><td colspan="8" class="not">Bu görünümde işlem yok. İşlemini yukarıdan ekle.</td></tr>'}
   else{tb.innerHTML=[...sirali].reverse().map(t=>{const v=kz(t),p=yuzde(t),c=v>0?"pos":v<0?"neg":"";
-    return `<tr title="${(t.not||"").replace(/"/g,"&quot;")}"><td>${t.tarih.slice(5)}</td><td>${t.varlik}</td><td>${t.yon==="short"?"Short":"Long"}</td><td>${sayi(t.giris)}</td><td>${sayi(t.cikis)}</td><td class="${c}">${sayi(v)}</td><td class="${c}">${sayi(p)}</td><td><button class="sil" data-id="${t.id}">✕</button></td></tr>`}).join("")}
+    const et=t.tur==="kaldirac"?`<span class="etiket k">${t.yon==="short"?"S":"L"} ${sayi(t.kaldirac||1)}x</span>`:'<span class="etiket">Spot</span>';
+    return `<tr title="${(t.not||"").replace(/"/g,"&quot;")}"><td>${t.tarih.slice(5)}</td><td>${t.varlik}</td><td>${et}</td><td>${sayi(t.giris)}</td><td>${sayi(t.cikis)}</td><td class="${c}">${sayi(v)}</td><td class="${c}">${sayi(p)}</td><td><button class="sil" data-id="${t.id}">✕</button></td></tr>`}).join("")}
   grafik(sonuc);
 }
 function grafik(sonuc){
@@ -141,27 +170,37 @@ function grafik(sonuc){
   const nok=[0];sonuc.forEach(v=>nok.push(nok[nok.length-1]+v));
   const mn=Math.min(...nok),mx=Math.max(...nok),ar=(mx-mn)||1;
   const px=i=>10+i*(W-20)/Math.max(1,nok.length-1),py=v=>H-12-(v-mn)/ar*(H-24);
-  x.strokeStyle="#262a33";x.beginPath();x.moveTo(0,py(0));x.lineTo(W,py(0));x.stroke();
+  x.strokeStyle="#262a33";x.lineWidth=1;x.beginPath();x.moveTo(0,py(0));x.lineTo(W,py(0));x.stroke();
   if(nok.length<2)return;
   x.lineWidth=2.5;x.strokeStyle=nok[nok.length-1]>=0?"#2ecc71":"#ff5c5c";x.beginPath();
   nok.forEach((v,i)=>i?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v)));x.stroke();
 }
+function turGoster(){const k=$("tur").value==="kaldirac";document.querySelectorAll(".kald").forEach(e=>e.classList.toggle("gizli",!k))}
+$("tur").onchange=turGoster;
+$("filtre").onclick=e=>{const f=e.target.dataset.f;if(!f)return;filtre=f;document.querySelectorAll("#filtre button").forEach(b=>b.classList.toggle("aktif",b.dataset.f===f));ciz()};
 $("tarih").value=new Date().toISOString().slice(0,10);
-$("form").onsubmit=e=>{e.preventDefault();
-  islemler.push({id:Date.now(),tarih:$("tarih").value,varlik:$("varlik").value.trim().toUpperCase(),yon:$("yon").value,
-    giris:+$("giris").value,cikis:+$("cikis").value,miktar:+$("miktar").value,ucret:+$("ucret").value||0,not:$("not").value.trim()});
-  ["giris","cikis","miktar","not"].forEach(k=>$(k).value="");$("ucret").value=0;kaydet()};
+$("form").onsubmit=e=>{e.preventDefault();const tur=$("tur").value;
+  islemler.push({id:Date.now(),tarih:$("tarih").value,varlik:$("varlik").value.trim().toUpperCase(),tur,
+    yon:tur==="kaldirac"?$("yon").value:"long",kaldirac:tur==="kaldirac"?Math.max(1,+$("kaldirac").value||1):1,
+    giris:+$("giris").value,cikis:+$("cikis").value,miktar:+$("miktar").value,ucret:+$("ucret").value||0,
+    fonlama:tur==="kaldirac"?(+$("fonlama").value||0):0,not:$("not").value.trim()});
+  ["giris","cikis","miktar","not"].forEach(k=>$(k).value="");$("ucret").value=0;$("fonlama").value=0;kaydet()};
 $("liste").onclick=e=>{const id=e.target.dataset.id;if(id&&confirm("Bu işlem silinsin mi?")){islemler=islemler.filter(t=>String(t.id)!==id);kaydet()}};
 $("temizle").onclick=()=>{if(islemler.length&&confirm("Tüm işlemler silinsin mi? Önce CSV indirmen önerilir.")){islemler=[];kaydet()}};
-$("indir").onclick=()=>{const bas="tarih,varlik,yon,giris,cikis,miktar,ucret,not\n";
-  const g=islemler.map(t=>[t.tarih,t.varlik,t.yon,t.giris,t.cikis,t.miktar,t.ucret,'"'+(t.not||"").replace(/"/g,'""')+'"'].join(",")).join("\n");
+$("indir").onclick=()=>{const bas="tarih,varlik,tur,yon,kaldirac,giris,cikis,miktar,ucret,fonlama,not\n";
+  const g=islemler.map(t=>[t.tarih,t.varlik,t.tur,t.yon,t.kaldirac,t.giris,t.cikis,t.miktar,t.ucret,t.fonlama,'"'+(t.not||"").replace(/"/g,'""')+'"'].join(",")).join("\n");
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([bas+g],{type:"text/csv"}));a.download="islem-gunlugu.csv";a.click()};
 $("yukleBtn").onclick=()=>$("yukle").click();
-$("yukle").onchange=async e=>{const f=e.target.files[0];if(!f)return;const satir=(await f.text()).trim().split(/\r?\n/).slice(1);let n=0;
-  satir.forEach((s,i)=>{const p=s.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map(v=>v.replace(/,$/,"").replace(/^"|"$/g,"").replace(/""/g,'"'));
-    if(p.length>=6&&!isNaN(+p[3])&&!isNaN(+p[4])&&!isNaN(+p[5])){islemler.push({id:Date.now()+i,tarih:p[0],varlik:(p[1]||"").toUpperCase(),yon:p[2]==="short"?"short":"long",giris:+p[3],cikis:+p[4],miktar:+p[5],ucret:+p[6]||0,not:p[7]||""});n++}});
+$("yukle").onchange=async e=>{const f=e.target.files[0];if(!f)return;const sat=(await f.text()).trim().split(/\r?\n/);
+  const bas=sat.shift().split(",").map(s=>s.trim().toLowerCase());let n=0;
+  sat.forEach((s,i)=>{const p=s.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map(v=>v.replace(/,$/,"").replace(/^"|"$/g,"").replace(/""/g,'"'));
+    const o={};bas.forEach((b,j)=>o[b]=p[j]);
+    const t=duzelt({id:Date.now()+i,tarih:o.tarih||"",varlik:(o.varlik||"").toUpperCase(),tur:o.tur==="kaldirac"?"kaldirac":(o.tur?"spot":undefined),yon:o.yon==="short"?"short":"long",
+      kaldirac:Math.max(1,+o.kaldirac||1),giris:+o.giris,cikis:+o.cikis,miktar:+o.miktar,ucret:+o.ucret||0,fonlama:+o.fonlama||0,not:o.not||""});
+    if(t.tur==="spot"){t.yon="long";t.kaldirac=1;t.fonlama=0}
+    if(t.tarih&&!isNaN(t.giris)&&!isNaN(t.cikis)&&!isNaN(t.miktar)){islemler.push(t);n++}});
   kaydet();alert(n+" işlem eklendi.");e.target.value=""};
-ciz();buluttanOku();
+turGoster();ciz();buluttanOku();
 </script>
 </body>
 </html>
