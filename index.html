@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>İşlem Günlüğü · Kâr Zarar Hesaplayıcı</title>
+<meta name="description" content="İşlemlerini gir, kâr zarar, kazanma oranı ve istatistiklerini anında gör. Ücretsiz, kayıt yok, veriler yalnız senin cihazında.">
+<meta property="og:title" content="İşlem Günlüğü · Kâr Zarar Hesaplayıcı">
+<meta property="og:description" content="İşlemlerini gir, kâr zarar ve kazanma oranını anında gör. Ücretsiz, kayıt yok.">
+<meta name="theme-color" content="#0f1115">
+<style>
+:root{--bg:#0f1115;--kart:#181b22;--cizgi:#262a33;--yazi:#e8eaee;--soluk:#8b93a3;--yesil:#2ecc71;--kirmizi:#ff5c5c;--sari:#f5c518}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--yazi);font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif;font-size:15px}
+.kap{max-width:720px;margin:0 auto;padding:16px 14px 40px}
+h1{font-size:20px;margin:4px 0 2px}
+.alt{color:var(--soluk);font-size:13px;margin-bottom:14px}
+.kart{background:var(--kart);border:1px solid var(--cizgi);border-radius:14px;padding:14px;margin-bottom:12px}
+.izgara{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:560px){.izgara{grid-template-columns:repeat(4,1fr)}}
+.ist{background:#11141a;border-radius:10px;padding:10px}
+.ist b{display:block;font-size:18px;margin-top:2px}
+.ist span{color:var(--soluk);font-size:12px}
+.pos{color:var(--yesil)}.neg{color:var(--kirmizi)}
+form{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(min-width:560px){form{grid-template-columns:repeat(3,1fr)}}
+label{font-size:12px;color:var(--soluk);display:flex;flex-direction:column;gap:4px}
+input,select{background:#11141a;border:1px solid var(--cizgi);color:var(--yazi);border-radius:8px;padding:9px;font-size:15px;width:100%}
+button{background:var(--sari);color:#111;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:15px;cursor:pointer}
+button.ikinci{background:#262a33;color:var(--yazi);font-weight:600}
+.tam{grid-column:1/-1}
+.sira{display:flex;gap:8px;flex-wrap:wrap}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:7px 4px;border-bottom:1px solid var(--cizgi);text-align:right;white-space:nowrap}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+.tablo{overflow-x:auto}
+.sil{background:none;color:var(--soluk);padding:2px 6px;font-weight:400}
+canvas{width:100%;height:170px}
+.not{color:var(--soluk);font-size:12px;line-height:1.5}
+a{color:var(--sari)}
+</style>
+</head>
+<body>
+<div class="kap">
+<h1>📒 İşlem Günlüğü</h1>
+<div class="alt">İşlemlerini gir, kâr zarar ve istatistiklerin anında hesaplansın. Kayıt yok, veriler yalnız bu cihazda kalır.</div>
+
+<div class="kart">
+<div class="izgara">
+<div class="ist"><span>Toplam kâr/zarar</span><b id="sToplam">0</b></div>
+<div class="ist"><span>Kazanma oranı</span><b id="sOran">%0</b></div>
+<div class="ist"><span>İşlem sayısı</span><b id="sSayi">0</b></div>
+<div class="ist"><span>Kâr faktörü</span><b id="sFaktor">-</b></div>
+<div class="ist"><span>Ort. kazanç</span><b id="sOrtK" class="pos">0</b></div>
+<div class="ist"><span>Ort. kayıp</span><b id="sOrtZ" class="neg">0</b></div>
+<div class="ist"><span>En iyi işlem</span><b id="sEnIyi">-</b></div>
+<div class="ist"><span>En kötü işlem</span><b id="sEnKotu">-</b></div>
+</div>
+</div>
+
+<div class="kart">
+<div class="not" style="margin-bottom:6px">Bakiye eğrisi (işlem sırasına göre toplam kâr/zarar)</div>
+<canvas id="grafik" width="680" height="170"></canvas>
+</div>
+
+<div class="kart">
+<form id="form">
+<label>Tarih<input type="date" id="tarih" required></label>
+<label>Varlık<input id="varlik" placeholder="BTC" required maxlength="12"></label>
+<label>Yön<select id="yon"><option value="long">Long (al, sonra sat)</option><option value="short">Short (sat, sonra al)</option></select></label>
+<label>Giriş fiyatı<input id="giris" type="number" step="any" min="0" required inputmode="decimal"></label>
+<label>Çıkış fiyatı<input id="cikis" type="number" step="any" min="0" required inputmode="decimal"></label>
+<label>Miktar (adet)<input id="miktar" type="number" step="any" min="0" required inputmode="decimal"></label>
+<label>Toplam ücret<input id="ucret" type="number" step="any" min="0" value="0" inputmode="decimal"></label>
+<label class="tam">Not (isteğe bağlı)<input id="not" maxlength="80" placeholder="Neden girdim, ne öğrendim?"></label>
+<button class="tam" type="submit">İşlemi ekle</button>
+</form>
+</div>
+
+<div class="kart">
+<div class="sira" style="margin-bottom:10px">
+<button class="ikinci" id="indir">CSV indir</button>
+<button class="ikinci" id="yukleBtn">CSV yükle</button>
+<input type="file" id="yukle" accept=".csv" hidden>
+<button class="ikinci" id="temizle">Hepsini sil</button>
+</div>
+<div class="tablo"><table>
+<thead><tr><th>Tarih</th><th>Varlık</th><th>Yön</th><th>Giriş</th><th>Çıkış</th><th>K/Z</th><th>%</th><th></th></tr></thead>
+<tbody id="liste"><tr><td colspan="8" class="not">Henüz işlem yok. İlk işlemini yukarıdan ekle.</td></tr></tbody>
+</table></div>
+</div>
+
+<div class="not">
+Bu araç yalnız senin girdiğin geçmiş işlemleri hesaplar. Yatırım tavsiyesi değildir, al-sat önerisi vermez. Veriler sunucuya gönderilmez, tarayıcının hafızasında durur; tarayıcı verilerini silersen kaybolur, CSV indirerek yedekle.<br>
+Kriptoyu sıfırdan öğrenmek için: <a href="https://dogukanlive.com" target="_blank" rel="noopener">dogukanlive.com</a>
+</div>
+</div>
+
+<script>
+const ANAHTAR="islem_gunlugu_v1";
+let islemler=JSON.parse(localStorage.getItem(ANAHTAR)||"[]");
+const $=id=>document.getElementById(id);
+const sayi=n=>(Math.round(n*100)/100).toLocaleString("tr-TR",{maximumFractionDigits:2});
+const kz=t=>{const fark=t.yon==="short"?(t.giris-t.cikis):(t.cikis-t.giris);return fark*t.miktar-(t.ucret||0)};
+const yuzde=t=>{const m=t.giris*t.miktar;return m>0?kz(t)/m*100:0};
+function kaydet(){localStorage.setItem(ANAHTAR,JSON.stringify(islemler));ciz()}
+function renk(el,v){el.classList.remove("pos","neg");if(v>0)el.classList.add("pos");if(v<0)el.classList.add("neg")}
+function ciz(){
+  const sirali=[...islemler].sort((a,b)=>a.tarih<b.tarih?-1:a.tarih>b.tarih?1:a.id-b.id);
+  const sonuc=sirali.map(kz);
+  const top=sonuc.reduce((a,b)=>a+b,0);
+  const kaz=sonuc.filter(x=>x>0),kay=sonuc.filter(x=>x<0);
+  $("sToplam").textContent=sayi(top);renk($("sToplam"),top);
+  $("sSayi").textContent=sonuc.length;
+  $("sOran").textContent="%"+(sonuc.length?Math.round(kaz.length/sonuc.length*100):0);
+  const tk=kaz.reduce((a,b)=>a+b,0),tz=Math.abs(kay.reduce((a,b)=>a+b,0));
+  $("sFaktor").textContent=tz>0?sayi(tk/tz):(tk>0?"∞":"-");
+  $("sOrtK").textContent=kaz.length?sayi(tk/kaz.length):"0";
+  $("sOrtZ").textContent=kay.length?sayi(-tz/kay.length):"0";
+  if(sonuc.length){
+    let iyi=0,kotu=0;sonuc.forEach((v,i)=>{if(v>sonuc[iyi])iyi=i;if(v<sonuc[kotu])kotu=i});
+    $("sEnIyi").textContent=sirali[iyi].varlik+" "+sayi(sonuc[iyi]);renk($("sEnIyi"),sonuc[iyi]);
+    $("sEnKotu").textContent=sirali[kotu].varlik+" "+sayi(sonuc[kotu]);renk($("sEnKotu"),sonuc[kotu]);
+  }else{$("sEnIyi").textContent="-";$("sEnKotu").textContent="-"}
+  const tb=$("liste");
+  if(!sirali.length){tb.innerHTML='<tr><td colspan="8" class="not">Henüz işlem yok. İlk işlemini yukarıdan ekle.</td></tr>'}
+  else{tb.innerHTML=[...sirali].reverse().map(t=>{const v=kz(t),p=yuzde(t),c=v>0?"pos":v<0?"neg":"";
+    return `<tr title="${(t.not||"").replace(/"/g,"&quot;")}"><td>${t.tarih.slice(5)}</td><td>${t.varlik}</td><td>${t.yon==="short"?"Short":"Long"}</td><td>${sayi(t.giris)}</td><td>${sayi(t.cikis)}</td><td class="${c}">${sayi(v)}</td><td class="${c}">${sayi(p)}</td><td><button class="sil" data-id="${t.id}">✕</button></td></tr>`}).join("")}
+  grafik(sonuc);
+}
+function grafik(sonuc){
+  const c=$("grafik"),x=c.getContext("2d"),W=c.width,H=c.height;x.clearRect(0,0,W,H);
+  const nok=[0];sonuc.forEach(v=>nok.push(nok[nok.length-1]+v));
+  const mn=Math.min(...nok),mx=Math.max(...nok),ar=(mx-mn)||1;
+  const px=i=>10+i*(W-20)/Math.max(1,nok.length-1),py=v=>H-12-(v-mn)/ar*(H-24);
+  x.strokeStyle="#262a33";x.beginPath();x.moveTo(0,py(0));x.lineTo(W,py(0));x.stroke();
+  if(nok.length<2)return;
+  x.lineWidth=2.5;x.strokeStyle=nok[nok.length-1]>=0?"#2ecc71":"#ff5c5c";x.beginPath();
+  nok.forEach((v,i)=>i?x.lineTo(px(i),py(v)):x.moveTo(px(i),py(v)));x.stroke();
+}
+$("tarih").value=new Date().toISOString().slice(0,10);
+$("form").onsubmit=e=>{e.preventDefault();
+  islemler.push({id:Date.now(),tarih:$("tarih").value,varlik:$("varlik").value.trim().toUpperCase(),yon:$("yon").value,
+    giris:+$("giris").value,cikis:+$("cikis").value,miktar:+$("miktar").value,ucret:+$("ucret").value||0,not:$("not").value.trim()});
+  ["giris","cikis","miktar","not"].forEach(k=>$(k).value="");$("ucret").value=0;kaydet()};
+$("liste").onclick=e=>{const id=e.target.dataset.id;if(id&&confirm("Bu işlem silinsin mi?")){islemler=islemler.filter(t=>String(t.id)!==id);kaydet()}};
+$("temizle").onclick=()=>{if(islemler.length&&confirm("Tüm işlemler silinsin mi? Önce CSV indirmen önerilir.")){islemler=[];kaydet()}};
+$("indir").onclick=()=>{const bas="tarih,varlik,yon,giris,cikis,miktar,ucret,not\n";
+  const g=islemler.map(t=>[t.tarih,t.varlik,t.yon,t.giris,t.cikis,t.miktar,t.ucret,'"'+(t.not||"").replace(/"/g,'""')+'"'].join(",")).join("\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([bas+g],{type:"text/csv"}));a.download="islem-gunlugu.csv";a.click()};
+$("yukleBtn").onclick=()=>$("yukle").click();
+$("yukle").onchange=async e=>{const f=e.target.files[0];if(!f)return;const satir=(await f.text()).trim().split(/\r?\n/).slice(1);let n=0;
+  satir.forEach((s,i)=>{const p=s.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map(v=>v.replace(/,$/,"").replace(/^"|"$/g,"").replace(/""/g,'"'));
+    if(p.length>=6&&!isNaN(+p[3])&&!isNaN(+p[4])&&!isNaN(+p[5])){islemler.push({id:Date.now()+i,tarih:p[0],varlik:(p[1]||"").toUpperCase(),yon:p[2]==="short"?"short":"long",giris:+p[3],cikis:+p[4],miktar:+p[5],ucret:+p[6]||0,not:p[7]||""});n++}});
+  kaydet();alert(n+" işlem eklendi.");e.target.value=""};
+ciz();
+</script>
+</body>
+</html>
