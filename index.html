@@ -207,7 +207,7 @@ function sayiOku(v){if(v==null)return NaN;let x=String(v).trim().replace(/[^0-9,
   else if(sn>-1&&TRSAYI){x=x.replace(/\./g,"")}
   else if(sv>-1){x=(TRSAYI||(x.split(",").length===2&&x.split(",")[1].length!==3))?x.replace(/\./g,"").replace(",","."):x.replace(/,/g,"")}
   return parseFloat(x)}
-const anah=s=>String(s||"").toLowerCase().replace(/ı/g,"i").replace(/[^a-z0-9]/g,"");
+const anah=s=>String(s||"").toLowerCase().replace(/ı/g,"i").replace(/ç/g,"c").replace(/ğ/g,"g").replace(/ö/g,"o").replace(/ş/g,"s").replace(/ü/g,"u").replace(/i̇/g,"i").replace(/[^a-z0-9]/g,"");
 function bul(o,...adlar){for(const a of adlar){for(const k in o)if(k===a)return o[k]}for(const a of adlar){for(const k in o)if(k.startsWith(a))return o[k]}return undefined}
 function tarihOku(v){const s=String(v||"").trim();let m=s.match(/(\d{4})-(\d{2})-(\d{2})/);if(m)return m[0];
   m=s.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);if(m)return m[3]+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");
@@ -226,31 +226,36 @@ function iceAktar(metin){
   const rk=bas.find(b=>/realizedprofit|realizedpnl|gerceklesenkar|gerceklesenkz|closedpnl|kapanankarzarar|pnl/.test(b));
   if(rk){veri.forEach(o=>{const p=sayiOku(o[rk]);if(isNaN(p)||p===0)return;
       const fee=Math.abs(sayiOku(bul(o,"fee","komisyon","ucret","tradingfee"))||0);
-      yeni.push(duzelt({id:id++,tarih:tarihOku(bul(o,"dateutc","date","time","tarih","zaman","closetime","createdtime")),varlik:varlikOku(bul(o,"symbol","sembol","pair","contract","parite")),
-        tur:"kaldirac",yon:/sell|short|sat/i.test(bul(o,"side","yon","direction")||"")?"long":"short",kaldirac:1,giris:0,cikis:0,miktar:sayiOku(bul(o,"quantity","qty","executed","miktar","amount"))||0,
+      yeni.push(duzelt({id:id++,tarih:tarihOku(bul(o,"dateutc","date","time","tarih","zaman","closetime","createdtime")),varlik:varlikOku(bul(o,"symbol","sembol","pair","contract","parite","futures","kontrat","cift")),
+        tur:"kaldirac",yon:(()=>{const d=bul(o,"direction","positionside","pozisyon","yon");if(d&&/long|short/i.test(d))return /short/i.test(d)?"short":"long";return /sell|sat/i.test(bul(o,"side")||"")?"long":"short"})(),
+        kaldirac:Math.max(1,sayiOku(bul(o,"leverage","kaldirac"))||1),giris:sayiOku(bul(o,"avgentryprice","entryprice","acilisfiyati","girisfiyati"))||0,cikis:sayiOku(bul(o,"avgcloseprice","closeprice","exitprice","kapanisfiyati","cikisfiyati"))||0,
+        miktar:sayiOku(bul(o,"closedquantity","quantity","qty","executed","miktar","amount"))||0,
         ucret:fee,fonlama:0,hazirKz:p,not:"Borsa dosyasından (gerçekleşen kâr/zarar)"}))});
     return{n:yeni.length,yeni,tip:"Vadeli işlem geçmişi"}}
-  const sk=bas.find(b=>/^(side|yon|islemyonu|alsat|direction)/.test(b))||bas.find(b=>/^type/.test(b)),fk=bas.find(b=>/^(price|fiyat|avgprice|averageprice|ortalamafiyat)/.test(b)),
-    mk=bas.find(b=>/^(executed|filled|quantity|qty|amount|miktar|adet)/.test(b)),pk=bas.find(b=>/^(pair|symbol|market|sembol|parite|coin)/.test(b));
+  const sk=bas.find(b=>/^(side|yon|islemyonu|islemturu|alsat|direction)/.test(b))||bas.find(b=>/^type|^tur$/.test(b)),
+    fk=bas.find(b=>/(avg|average|ortalama|filled).*(price|fiyat)/.test(b))||bas.find(b=>/(price|fiyat)/.test(b)&&!/(total|toplam|order|emir)/.test(b)),
+    mk=bas.find(b=>!/(price|fiyat|total|toplam)/.test(b)&&/^(executed|filled|dealt|quantity|qty|amount|miktar|adet|islemmiktari|gerceklesen)/.test(b)),
+    pk=bas.find(b=>/^(pair|symbol|market|sembol|parite|cift|coin|islemcifti)/.test(b));
   if(sk&&fk&&mk&&pk){
     const sirali=veri.map(o=>({tarih:tarihOku(bul(o,"dateutc","date","time","tarih","zaman")),ham:bul(o,"dateutc","date","time","tarih","zaman"),
-      v:varlikOku(o[pk]),al:/buy|al/i.test(o[sk]||""),fiyat:sayiOku(o[fk]),adet:Math.abs(sayiOku(o[mk])),
-      ucret:Math.abs(sayiOku(bul(o,"fee","komisyon","ucret","tradingfee"))||0),ucretBirim:String(bul(o,"feecoin","feeasset","feecurrency","fee")||"")}))
+      v:varlikOku(o[pk]),al:/buy|alis|^al$|alım|alış/i.test(o[sk]||""),fiyat:sayiOku(o[fk]),adet:Math.abs(sayiOku(o[mk])),
+      ucret:Math.abs(sayiOku(bul(o,"fee","komisyon","ucret","tradingfee"))||0),ucretBirim:String(bul(o,"feecoin","feeasset","feecurrency","ucretbirimi","komisyonbirimi")||String(bul(o,"fee","ucret","komisyon","tradingfee")||"").replace(/[0-9.,\s-]/g,""))}))
       .filter(x=>x.fiyat>0&&x.adet>0).sort((a,b)=>String(a.ham)<String(b.ham)?-1:1);
     const stok={};
     sirali.forEach(x=>{const s=stok[x.v]||(stok[x.v]={adet:0,maliyet:0});
-      const ucretUSD=/USD|TRY/i.test(x.ucretBirim)?x.ucret:(/BNB/i.test(x.ucretBirim)?0:x.ucret*x.fiyat);
+      const ub=x.ucretBirim.toUpperCase();const ucretUSD=(!ub||/USD|TRY|EUR/.test(ub))?x.ucret:(ub===x.v?x.ucret*x.fiyat:0);
       if(x.al){s.maliyet+=x.adet*x.fiyat+ucretUSD;s.adet+=x.adet}
       else if(s.adet>0){const a=Math.min(x.adet,s.adet),ort=s.maliyet/s.adet;
         yeni.push(duzelt({id:id++,tarih:x.tarih,varlik:x.v,tur:"spot",yon:"long",kaldirac:1,giris:ort,cikis:x.fiyat,miktar:a,ucret:ucretUSD*(a/x.adet),fonlama:0,not:"Borsa dosyasından (ortalama maliyet)"}));
         s.maliyet-=ort*a;s.adet-=a}});
-    return{n:yeni.length,yeni,tip:"Spot işlem geçmişi",acik:Object.entries(stok).filter(([k,s])=>s.adet>1e-9).map(([k])=>k)}}
+    return{n:yeni.length,yeni,tip:"Spot işlem geçmişi",okunan:sirali.length,alim:sirali.filter(x=>x.al).length,acik:Object.entries(stok).filter(([k,s])=>s.adet>1e-9).map(([k])=>k)}}
   return{n:0,bas:r[0]};
 }
 $("yukle").onchange=async e=>{const f=e.target.files[0];if(!f)return;
   if(/\.xlsx?$/i.test(f.name)){alert("Bu bir Excel dosyası. Excel'de açıp 'Farklı kaydet > CSV' ile kaydet, sonra yükle.");e.target.value="";return}
   const s=iceAktar(await f.text());
   if(s.n){islemler.push(...s.yeni);kaydet();alert(s.n+" kapanmış işlem eklendi ("+s.tip+")."+(s.acik&&s.acik.length?"\nHenüz satılmamış (açık) pozisyonlar sayılmadı: "+s.acik.join(", "):""))}
+  else if(s.tip)alert("Dosya tanındı ("+s.tip+"), "+(s.okunan||0)+" satır okundu ama kapanmış işlem yok."+(s.acik&&s.acik.length?"\nAçık pozisyonlar (henüz satılmamış): "+s.acik.join(", "):"")+"\n\nKâr zararı hesaplamak için alış ve satışın ikisinin de dosyada olması gerekir. Daha uzun bir tarih aralığı seçip tekrar indir.");
   else alert("Dosyada işlem bulunamadı.\nBulunan sütunlar: "+(s.bas||[]).join(", ")+"\n\nDesteklenen: bu sayfanın CSV'si, Binance/OKX/Bybit spot işlem geçmişi (Tarih, Parite, Yön, Fiyat, Miktar) ve vadeli işlem geçmişi (Realized Profit / Gerçekleşen K/Z sütunu).");
   e.target.value=""};
 turGoster();ciz();buluttanOku();
