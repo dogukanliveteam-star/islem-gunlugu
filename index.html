@@ -102,8 +102,8 @@ a{color:var(--sari)}
 <div class="kart">
 <div class="sira" style="margin-bottom:10px">
 <button class="ikinci" id="indir">CSV indir</button>
-<button class="ikinci" id="yukleBtn">CSV yükle</button>
-<input type="file" id="yukle" accept=".csv" hidden>
+<button class="ikinci" id="yukleBtn">Dosya yükle (CSV/Excel)</button>
+<input type="file" id="yukle" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
 <button class="ikinci" id="temizle">Hepsini sil</button>
 </div>
 <div class="tablo"><table>
@@ -251,12 +251,20 @@ function iceAktar(metin){
     return{n:yeni.length,yeni,tip:"Spot işlem geçmişi",okunan:sirali.length,alim:sirali.filter(x=>x.al).length,acik:Object.entries(stok).filter(([k,s])=>s.adet>1e-9).map(([k])=>k)}}
   return{n:0,bas:r[0]};
 }
-$("yukle").onchange=async e=>{const f=e.target.files[0];if(!f)return;
-  if(/\.xlsx?$/i.test(f.name)){alert("Bu bir Excel dosyası. Excel'de açıp 'Farklı kaydet > CSV' ile kaydet, sonra yükle.");e.target.value="";return}
-  const s=iceAktar(await f.text());
+let XLSXyuk=null;
+function xlsxYukle(){return XLSXyuk||(XLSXyuk=new Promise((ok,hata)=>{if(window.XLSX)return ok(window.XLSX);const sc=document.createElement("script");
+  sc.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";sc.onload=()=>ok(window.XLSX);sc.onerror=()=>{XLSXyuk=null;hata(new Error("xlsx"))};document.head.appendChild(sc)}))}
+async function dosyaMetni(f){const buf=new Uint8Array(await f.arrayBuffer());
+  const excel=(buf[0]===0x50&&buf[1]===0x4B)||(buf[0]===0xD0&&buf[1]===0xCF);
+  if(!excel)return new TextDecoder("utf-8").decode(buf);
+  const X=await xlsxYukle();const wb=X.read(buf,{type:"array"});let en="",enN=0;
+  wb.SheetNames.forEach(n=>{const c=X.utils.sheet_to_csv(wb.Sheets[n],{FS:",",blankrows:false});const k=c.split("\n").length;if(k>enN){en=c;enN=k}});return en}
+$("yukle").onchange=async e=>{const f=e.target.files[0];if(!f)return;let metin;
+  try{metin=await dosyaMetni(f)}catch(_){alert("Excel dosyası açılamadı (internet bağlantısını kontrol et). Excel'de 'Farklı kaydet > CSV' ile kaydedip tekrar dene.");e.target.value="";return}
+  const s=iceAktar(metin);
   if(s.n){islemler.push(...s.yeni);kaydet();alert(s.n+" kapanmış işlem eklendi ("+s.tip+")."+(s.acik&&s.acik.length?"\nHenüz satılmamış (açık) pozisyonlar sayılmadı: "+s.acik.join(", "):""))}
   else if(s.tip)alert("Dosya tanındı ("+s.tip+"), "+(s.okunan||0)+" satır okundu ama kapanmış işlem yok."+(s.acik&&s.acik.length?"\nAçık pozisyonlar (henüz satılmamış): "+s.acik.join(", "):"")+"\n\nKâr zararı hesaplamak için alış ve satışın ikisinin de dosyada olması gerekir. Daha uzun bir tarih aralığı seçip tekrar indir.");
-  else alert("Dosyada işlem bulunamadı.\nBulunan sütunlar: "+(s.bas||[]).join(", ")+"\n\nDesteklenen: bu sayfanın CSV'si, Binance/OKX/Bybit spot işlem geçmişi (Tarih, Parite, Yön, Fiyat, Miktar) ve vadeli işlem geçmişi (Realized Profit / Gerçekleşen K/Z sütunu).");
+  else alert("Dosyada işlem bulunamadı.\nBulunan sütunlar: "+(s.bas||[]).join(", ")+"\n\nDesteklenen: bu sayfanın CSV'si, Binance/OKX/Bybit/MEXC (CSV ya da Excel) spot işlem geçmişi (Tarih, Parite, Yön, Fiyat, Miktar) ve vadeli işlem geçmişi (Realized Profit / Gerçekleşen K/Z sütunu).");
   e.target.value=""};
 turGoster();ciz();buluttanOku();
 </script>
