@@ -129,7 +129,7 @@ const BULUT=TG&&TG.CloudStorage&&TG.isVersionAtLeast&&TG.isVersionAtLeast("6.9")
 if(TG){TG.ready();TG.expand();}
 const $=id=>document.getElementById(id);
 const sayi=n=>(Math.round(n*100)/100).toLocaleString("tr-TR",{maximumFractionDigits:2});
-const kz=t=>{const fark=(t.tur==="kaldirac"&&t.yon==="short")?(t.giris-t.cikis):(t.cikis-t.giris);return fark*t.miktar-(t.ucret||0)-(t.tur==="kaldirac"?(t.fonlama||0):0)};
+const kz=t=>{if(typeof t.hazirKz==="number")return t.hazirKz-(t.ucret||0);const fark=(t.tur==="kaldirac"&&t.yon==="short")?(t.giris-t.cikis):(t.cikis-t.giris);return fark*t.miktar-(t.ucret||0)-(t.tur==="kaldirac"?(t.fonlama||0):0)};
 const yuzde=t=>{const x=t.tur==="kaldirac"?Math.max(1,t.kaldirac||1):1;const teminat=t.giris*t.miktar/x;return teminat>0?kz(t)/teminat*100:0};
 function bulutaYaz(){if(!BULUT)return;const j=JSON.stringify(islemler),p=[];for(let i=0;i<j.length;i+=3800)p.push(j.slice(i,i+3800));
   BULUT.setItem("ig_n",String(p.length));p.forEach((x,i)=>BULUT.setItem("ig_"+i,x));}
@@ -162,7 +162,7 @@ function ciz(){
   if(!sirali.length){tb.innerHTML='<tr><td colspan="8" class="not">Bu görünümde işlem yok. İşlemini yukarıdan ekle.</td></tr>'}
   else{tb.innerHTML=[...sirali].reverse().map(t=>{const v=kz(t),p=yuzde(t),c=v>0?"pos":v<0?"neg":"";
     const et=t.tur==="kaldirac"?`<span class="etiket k">${t.yon==="short"?"S":"L"} ${sayi(t.kaldirac||1)}x</span>`:'<span class="etiket">Spot</span>';
-    return `<tr title="${(t.not||"").replace(/"/g,"&quot;")}"><td>${t.tarih.slice(5)}</td><td>${t.varlik}</td><td>${et}</td><td>${sayi(t.giris)}</td><td>${sayi(t.cikis)}</td><td class="${c}">${sayi(v)}</td><td class="${c}">${sayi(p)}</td><td><button class="sil" data-id="${t.id}">✕</button></td></tr>`}).join("")}
+    return `<tr title="${(t.not||"").replace(/"/g,"&quot;")}"><td>${t.tarih.slice(5)}</td><td>${t.varlik}</td><td>${et}</td><td>${t.giris?sayi(t.giris):"-"}</td><td>${t.cikis?sayi(t.cikis):"-"}</td><td class="${c}">${sayi(v)}</td><td class="${c}">${sayi(p)}</td><td><button class="sil" data-id="${t.id}">✕</button></td></tr>`}).join("")}
   grafik(sonuc);
 }
 function grafik(sonuc){
@@ -191,15 +191,68 @@ $("indir").onclick=()=>{const bas="tarih,varlik,tur,yon,kaldirac,giris,cikis,mik
   const g=islemler.map(t=>[t.tarih,t.varlik,t.tur,t.yon,t.kaldirac,t.giris,t.cikis,t.miktar,t.ucret,t.fonlama,'"'+(t.not||"").replace(/"/g,'""')+'"'].join(",")).join("\n");
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([bas+g],{type:"text/csv"}));a.download="islem-gunlugu.csv";a.click()};
 $("yukleBtn").onclick=()=>$("yukle").click();
-$("yukle").onchange=async e=>{const f=e.target.files[0];if(!f)return;const sat=(await f.text()).trim().split(/\r?\n/);
-  const bas=sat.shift().split(",").map(s=>s.trim().toLowerCase());let n=0;
-  sat.forEach((s,i)=>{const p=s.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map(v=>v.replace(/,$/,"").replace(/^"|"$/g,"").replace(/""/g,'"'));
-    const o={};bas.forEach((b,j)=>o[b]=p[j]);
-    const t=duzelt({id:Date.now()+i,tarih:o.tarih||"",varlik:(o.varlik||"").toUpperCase(),tur:o.tur==="kaldirac"?"kaldirac":(o.tur?"spot":undefined),yon:o.yon==="short"?"short":"long",
-      kaldirac:Math.max(1,+o.kaldirac||1),giris:+o.giris,cikis:+o.cikis,miktar:+o.miktar,ucret:+o.ucret||0,fonlama:+o.fonlama||0,not:o.not||""});
-    if(t.tur==="spot"){t.yon="long";t.kaldirac=1;t.fonlama=0}
-    if(t.tarih&&!isNaN(t.giris)&&!isNaN(t.cikis)&&!isNaN(t.miktar)){islemler.push(t);n++}});
-  kaydet();alert(n+" işlem eklendi.");e.target.value=""};
+let TRSAYI=false;
+function csvOku(metin){
+  metin=metin.replace(/^\uFEFF/,"").trim();const ilk=metin.split(/\r?\n/)[0];
+  const ayr=[";","\t",","].sort((a,b)=>ilk.split(b).length-ilk.split(a).length)[0];
+  const satirlar=[];let s=[],h="",q=false;
+  for(let i=0;i<metin.length;i++){const c=metin[i];
+    if(q){if(c==='"'&&metin[i+1]==='"'){h+='"';i++}else if(c==='"')q=false;else h+=c}
+    else if(c==='"')q=true;else if(c===ayr){s.push(h);h=""}else if(c==="\n"||c==="\r"){if(c==="\r"&&metin[i+1]==="\n")i++;s.push(h);satirlar.push(s);s=[];h=""}else h+=c}
+  s.push(h);satirlar.push(s);TRSAYI=ayr===";";return satirlar.filter(r=>r.some(x=>x.trim()!==""));
+}
+function sayiOku(v){if(v==null)return NaN;let x=String(v).trim().replace(/[^0-9,.\-eE]/g,"");if(!x)return NaN;
+  const sv=x.lastIndexOf(","),sn=x.lastIndexOf(".");
+  if(sv>-1&&sn>-1){x=sv>sn?x.replace(/\./g,"").replace(",","."):x.replace(/,/g,"")}
+  else if(sn>-1&&TRSAYI){x=x.replace(/\./g,"")}
+  else if(sv>-1){x=(TRSAYI||(x.split(",").length===2&&x.split(",")[1].length!==3))?x.replace(/\./g,"").replace(",","."):x.replace(/,/g,"")}
+  return parseFloat(x)}
+const anah=s=>String(s||"").toLowerCase().replace(/ı/g,"i").replace(/[^a-z0-9]/g,"");
+function bul(o,...adlar){for(const a of adlar){for(const k in o)if(k===a)return o[k]}for(const a of adlar){for(const k in o)if(k.startsWith(a))return o[k]}return undefined}
+function tarihOku(v){const s=String(v||"").trim();let m=s.match(/(\d{4})-(\d{2})-(\d{2})/);if(m)return m[0];
+  m=s.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);if(m)return m[3]+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");
+  const d=new Date(s);return isNaN(d)?new Date().toISOString().slice(0,10):d.toISOString().slice(0,10)}
+function varlikOku(v){return String(v||"").toUpperCase().replace(/[-_/ ]/g,"").replace(/(USDT|USDC|BUSD|FDUSD|TRY|USD|EUR)$/,"")||"?"}
+function iceAktar(metin){
+  const r=csvOku(metin);if(r.length<2)return{n:0,bas:r[0]||[]};
+  const bas=r[0].map(anah),veri=r.slice(1).map(x=>{const o={};bas.forEach((b,j)=>o[b]=x[j]);return o});const yeni=[];let id=Date.now();
+  if(bas.includes("giris")&&bas.includes("cikis")){
+    veri.forEach(o=>{const t=duzelt({id:id++,tarih:tarihOku(o.tarih),varlik:(o.varlik||"").toUpperCase(),tur:o.tur==="kaldirac"?"kaldirac":(o.tur?"spot":undefined),
+      yon:o.yon==="short"?"short":"long",kaldirac:Math.max(1,sayiOku(o.kaldirac)||1),giris:sayiOku(o.giris),cikis:sayiOku(o.cikis),miktar:sayiOku(o.miktar),
+      ucret:sayiOku(o.ucret)||0,fonlama:sayiOku(o.fonlama)||0,not:o.not||""});
+      if(t.tur==="spot"){t.yon="long";t.kaldirac=1;t.fonlama=0}
+      if(!isNaN(t.giris)&&!isNaN(t.cikis)&&!isNaN(t.miktar))yeni.push(t)});
+    return{n:yeni.length,yeni,tip:"İşlem Günlüğü"}}
+  const rk=bas.find(b=>/realizedprofit|realizedpnl|gerceklesenkar|gerceklesenkz|closedpnl|kapanankarzarar|pnl/.test(b));
+  if(rk){veri.forEach(o=>{const p=sayiOku(o[rk]);if(isNaN(p)||p===0)return;
+      const fee=Math.abs(sayiOku(bul(o,"fee","komisyon","ucret","tradingfee"))||0);
+      yeni.push(duzelt({id:id++,tarih:tarihOku(bul(o,"dateutc","date","time","tarih","zaman","closetime","createdtime")),varlik:varlikOku(bul(o,"symbol","sembol","pair","contract","parite")),
+        tur:"kaldirac",yon:/sell|short|sat/i.test(bul(o,"side","yon","direction")||"")?"long":"short",kaldirac:1,giris:0,cikis:0,miktar:sayiOku(bul(o,"quantity","qty","executed","miktar","amount"))||0,
+        ucret:fee,fonlama:0,hazirKz:p,not:"Borsa dosyasından (gerçekleşen kâr/zarar)"}))});
+    return{n:yeni.length,yeni,tip:"Vadeli işlem geçmişi"}}
+  const sk=bas.find(b=>/^(side|yon|islemyonu|alsat|direction)/.test(b))||bas.find(b=>/^type/.test(b)),fk=bas.find(b=>/^(price|fiyat|avgprice|averageprice|ortalamafiyat)/.test(b)),
+    mk=bas.find(b=>/^(executed|filled|quantity|qty|amount|miktar|adet)/.test(b)),pk=bas.find(b=>/^(pair|symbol|market|sembol|parite|coin)/.test(b));
+  if(sk&&fk&&mk&&pk){
+    const sirali=veri.map(o=>({tarih:tarihOku(bul(o,"dateutc","date","time","tarih","zaman")),ham:bul(o,"dateutc","date","time","tarih","zaman"),
+      v:varlikOku(o[pk]),al:/buy|al/i.test(o[sk]||""),fiyat:sayiOku(o[fk]),adet:Math.abs(sayiOku(o[mk])),
+      ucret:Math.abs(sayiOku(bul(o,"fee","komisyon","ucret","tradingfee"))||0),ucretBirim:String(bul(o,"feecoin","feeasset","feecurrency","fee")||"")}))
+      .filter(x=>x.fiyat>0&&x.adet>0).sort((a,b)=>String(a.ham)<String(b.ham)?-1:1);
+    const stok={};
+    sirali.forEach(x=>{const s=stok[x.v]||(stok[x.v]={adet:0,maliyet:0});
+      const ucretUSD=/USD|TRY/i.test(x.ucretBirim)?x.ucret:(/BNB/i.test(x.ucretBirim)?0:x.ucret*x.fiyat);
+      if(x.al){s.maliyet+=x.adet*x.fiyat+ucretUSD;s.adet+=x.adet}
+      else if(s.adet>0){const a=Math.min(x.adet,s.adet),ort=s.maliyet/s.adet;
+        yeni.push(duzelt({id:id++,tarih:x.tarih,varlik:x.v,tur:"spot",yon:"long",kaldirac:1,giris:ort,cikis:x.fiyat,miktar:a,ucret:ucretUSD*(a/x.adet),fonlama:0,not:"Borsa dosyasından (ortalama maliyet)"}));
+        s.maliyet-=ort*a;s.adet-=a}});
+    return{n:yeni.length,yeni,tip:"Spot işlem geçmişi",acik:Object.entries(stok).filter(([k,s])=>s.adet>1e-9).map(([k])=>k)}}
+  return{n:0,bas:r[0]};
+}
+$("yukle").onchange=async e=>{const f=e.target.files[0];if(!f)return;
+  if(/\.xlsx?$/i.test(f.name)){alert("Bu bir Excel dosyası. Excel'de açıp 'Farklı kaydet > CSV' ile kaydet, sonra yükle.");e.target.value="";return}
+  const s=iceAktar(await f.text());
+  if(s.n){islemler.push(...s.yeni);kaydet();alert(s.n+" kapanmış işlem eklendi ("+s.tip+")."+(s.acik&&s.acik.length?"\nHenüz satılmamış (açık) pozisyonlar sayılmadı: "+s.acik.join(", "):""))}
+  else alert("Dosyada işlem bulunamadı.\nBulunan sütunlar: "+(s.bas||[]).join(", ")+"\n\nDesteklenen: bu sayfanın CSV'si, Binance/OKX/Bybit spot işlem geçmişi (Tarih, Parite, Yön, Fiyat, Miktar) ve vadeli işlem geçmişi (Realized Profit / Gerçekleşen K/Z sütunu).");
+  e.target.value=""};
 turGoster();ciz();buluttanOku();
 </script>
 </body>
