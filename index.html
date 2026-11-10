@@ -8,6 +8,7 @@
 <meta property="og:title" content="İşlem Günlüğü · Kâr Zarar Hesaplayıcı">
 <meta property="og:description" content="İşlemlerini gir, kâr zarar ve kazanma oranını anında gör. Ücretsiz, kayıt yok.">
 <meta name="theme-color" content="#0f1115">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root{--bg:#0f1115;--kart:#181b22;--cizgi:#262a33;--yazi:#e8eaee;--soluk:#8b93a3;--yesil:#2ecc71;--kirmizi:#ff5c5c;--sari:#f5c518}
 *{box-sizing:border-box}
@@ -91,7 +92,7 @@ a{color:var(--sari)}
 </div>
 
 <div class="not">
-Bu araç yalnız senin girdiğin geçmiş işlemleri hesaplar. Yatırım tavsiyesi değildir, al-sat önerisi vermez. Veriler sunucuya gönderilmez, tarayıcının hafızasında durur; tarayıcı verilerini silersen kaybolur, CSV indirerek yedekle.<br>
+Bu araç yalnız senin girdiğin geçmiş işlemleri hesaplar. Yatırım tavsiyesi değildir, al-sat önerisi vermez. Veriler bizim sunucumuza gönderilmez; tarayıcında, Telegram içinde açtıysan Telegram hesabının kendi depolamasında durur; tarayıcı verilerini silersen kaybolur, CSV indirerek yedekle.<br>
 Kriptoyu sıfırdan öğrenmek için: <a href="https://dogukanlive.com" target="_blank" rel="noopener">dogukanlive.com</a>
 </div>
 </div>
@@ -99,11 +100,18 @@ Kriptoyu sıfırdan öğrenmek için: <a href="https://dogukanlive.com" target="
 <script>
 const ANAHTAR="islem_gunlugu_v1";
 let islemler=JSON.parse(localStorage.getItem(ANAHTAR)||"[]");
+const TG=window.Telegram&&Telegram.WebApp&&Telegram.WebApp.initData?Telegram.WebApp:null;
+const BULUT=TG&&TG.CloudStorage&&TG.isVersionAtLeast&&TG.isVersionAtLeast("6.9")?TG.CloudStorage:null;
+if(TG){TG.ready();TG.expand();}
+function bulutaYaz(){if(!BULUT)return;const j=JSON.stringify(islemler),p=[];for(let i=0;i<j.length;i+=3800)p.push(j.slice(i,i+3800));
+  BULUT.setItem("ig_n",String(p.length));p.forEach((x,i)=>BULUT.setItem("ig_"+i,x));}
+function buluttanOku(){if(!BULUT)return;BULUT.getItem("ig_n",(e,n)=>{n=+n||0;if(e||!n)return;const k=[...Array(n).keys()].map(i=>"ig_"+i);
+  BULUT.getItems(k,(e2,v)=>{if(e2)return;try{const b=JSON.parse(k.map(x=>v[x]||"").join(""));if(Array.isArray(b)&&b.length>=islemler.length){islemler=b;localStorage.setItem(ANAHTAR,JSON.stringify(b));ciz()}}catch(_){}})})}
 const $=id=>document.getElementById(id);
 const sayi=n=>(Math.round(n*100)/100).toLocaleString("tr-TR",{maximumFractionDigits:2});
 const kz=t=>{const fark=t.yon==="short"?(t.giris-t.cikis):(t.cikis-t.giris);return fark*t.miktar-(t.ucret||0)};
 const yuzde=t=>{const m=t.giris*t.miktar;return m>0?kz(t)/m*100:0};
-function kaydet(){localStorage.setItem(ANAHTAR,JSON.stringify(islemler));ciz()}
+function kaydet(){localStorage.setItem(ANAHTAR,JSON.stringify(islemler));bulutaYaz();ciz()}
 function renk(el,v){el.classList.remove("pos","neg");if(v>0)el.classList.add("pos");if(v<0)el.classList.add("neg")}
 function ciz(){
   const sirali=[...islemler].sort((a,b)=>a.tarih<b.tarih?-1:a.tarih>b.tarih?1:a.id-b.id);
@@ -153,7 +161,7 @@ $("yukle").onchange=async e=>{const f=e.target.files[0];if(!f)return;const satir
   satir.forEach((s,i)=>{const p=s.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map(v=>v.replace(/,$/,"").replace(/^"|"$/g,"").replace(/""/g,'"'));
     if(p.length>=6&&!isNaN(+p[3])&&!isNaN(+p[4])&&!isNaN(+p[5])){islemler.push({id:Date.now()+i,tarih:p[0],varlik:(p[1]||"").toUpperCase(),yon:p[2]==="short"?"short":"long",giris:+p[3],cikis:+p[4],miktar:+p[5],ucret:+p[6]||0,not:p[7]||""});n++}});
   kaydet();alert(n+" işlem eklendi.");e.target.value=""};
-ciz();
+ciz();buluttanOku();
 </script>
 </body>
 </html>
