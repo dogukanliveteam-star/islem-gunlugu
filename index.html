@@ -140,7 +140,9 @@ function yerelOku(){let ham=null;try{ham=localStorage.getItem(ANAHTAR)}catch(_){
 function mezarTemizle(m){const o={},simdi=Date.now();if(kayitMi(m))for(const k in m){const z=+m[k];if(z>0&&simdi-z<MEZAR_OMRU)o[k]=z}return o}
 function mezarKat(a,b){const o={...a};for(const k in b)if(!(o[k]>=b[k]))o[k]=b[k];return o}
 function silinenOku(){try{return mezarTemizle(JSON.parse(localStorage.getItem(SILINEN_ANAHTAR)||"{}"))}catch(_){return{}}}
-function birlestir(yerel,bulut,mezar){const gor={},cik=[];[...yerel,...bulut].forEach(t=>{const k=t.id==null?JSON.stringify(t):String(t.id);if(gor[k]||mezar[k])return;gor[k]=1;cik.push(t)});return cik}
+const mezarAnahtar=t=>t.id==null?JSON.stringify(t):String(t.id);
+const anahtarlar=l=>l.map(mezarAnahtar).sort().join("\n");
+function birlestir(yerel,bulut,mezar){const gor={},cik=[];[...yerel,...bulut].forEach(t=>{const k=mezarAnahtar(t);if(gor[k]||mezar[k])return;gor[k]=1;cik.push(t)});return cik}
 function yerelYaz(){try{if(!yerelKilit)localStorage.setItem(ANAHTAR,JSON.stringify(islemler));localStorage.setItem(SILINEN_ANAHTAR,JSON.stringify(silinen))}catch(_){}}
 const ilkOkuma=yerelOku();
 let islemler=ilkOkuma.liste,silinen=silinenOku();
@@ -162,8 +164,8 @@ function buluttanOku(){if(!BULUT)return;BULUT.getItems(["ig_n","ig_sil_n"],(e,s)
   BULUT.getItems([...k,...ks],(e2,v)=>{if(e2||!v)return;let b=[],bm={};
     try{if(n){b=JSON.parse(k.map(x=>v[x]||"").join(""));if(!Array.isArray(b))return;b=b.filter(kayitMi)}}catch(_){return}
     try{if(m)bm=mezarTemizle(Object.fromEntries(JSON.parse(ks.map(x=>v[x]||"").join(""))))}catch(_){bm={}}
-    const yeniMezar=mezarKat(silinen,bm),yeni=birlestir(islemler,b.map(duzelt),yeniMezar);
-    const bulutEski=yeni.length!==b.length||Object.keys(yeniMezar).length!==Object.keys(bm).length;
+    const bd=b.map(duzelt),yeniMezar=mezarKat(silinen,bm),yeni=birlestir(islemler,bd,yeniMezar);
+    const bulutEski=anahtarlar(yeni)!==anahtarlar(bd)||Object.keys(yeniMezar).sort().join("\n")!==Object.keys(bm).sort().join("\n");
     islemler=yeni;silinen=yeniMezar;yerelYaz();if(bulutEski)bulutaYaz();ciz()})})}
 function kaydet(){yerelYaz();bulutaYaz();ciz()}
 function ogeYap(ad,metin,sinif){const el=document.createElement(ad);if(metin!=null)el.textContent=metin;if(sinif)el.className=sinif;return el}
@@ -196,7 +198,7 @@ function ciz(){
     const tr=ogeYap("tr");tr.title=String(t.not==null?"":t.not);
     const et=t.tur==="kaldirac"?ogeYap("span",(t.yon==="short"?"S":"L")+" "+sayi(t.kaldirac||1)+"x","etiket k"):ogeYap("span","Spot","etiket");
     const tdEt=ogeYap("td");tdEt.appendChild(et);
-    const sil=ogeYap("button","✕","sil");sil.dataset.id=String(t.id);const tdSil=ogeYap("td");tdSil.appendChild(sil);
+    const sil=ogeYap("button","✕","sil");sil.dataset.id=mezarAnahtar(t);const tdSil=ogeYap("td");tdSil.appendChild(sil);
     tr.append(ogeYap("td",String(t.tarih||"").slice(5)),ogeYap("td",varlikTemiz(t.varlik)),tdEt,ogeYap("td",t.giris?sayi(t.giris):"-"),ogeYap("td",t.cikis?sayi(t.cikis):"-"),ogeYap("td",sayi(v),c),ogeYap("td",sayi(p),c),tdSil);
     tb.appendChild(tr)});
   grafik(sonuc);
@@ -221,8 +223,8 @@ $("form").onsubmit=e=>{e.preventDefault();const tur=$("tur").value;
     giris:+$("giris").value,cikis:+$("cikis").value,miktar:+$("miktar").value,ucret:+$("ucret").value||0,
     fonlama:tur==="kaldirac"?(+$("fonlama").value||0):0,not:$("not").value.trim()});
   ["giris","cikis","miktar","not"].forEach(k=>$(k).value="");$("ucret").value=0;$("fonlama").value=0;kaydet()};
-$("liste").onclick=e=>{const id=e.target.dataset.id;if(id&&confirm("Bu işlem silinsin mi?")){islemler=islemler.filter(t=>String(t.id)!==id);silinen[id]=Date.now();kaydet()}};
-$("temizle").onclick=()=>{if(islemler.length&&confirm("Tüm işlemler silinsin mi? Önce CSV indirmen önerilir.")){const z=Date.now();islemler.forEach(t=>{if(t.id!=null)silinen[String(t.id)]=z});islemler=[];kaydet()}};
+$("liste").onclick=e=>{const id=e.target.dataset.id;if(id&&confirm("Bu işlem silinsin mi?")){islemler=islemler.filter(t=>mezarAnahtar(t)!==id);silinen[id]=Date.now();kaydet()}};
+$("temizle").onclick=()=>{if(islemler.length&&confirm("Tüm işlemler silinsin mi? Önce CSV indirmen önerilir.")){const z=Date.now();islemler.forEach(t=>{silinen[mezarAnahtar(t)]=z});islemler=[];kaydet()}};
 $("indir").onclick=()=>{const bas="tarih,varlik,tur,yon,kaldirac,giris,cikis,miktar,ucret,fonlama,not\n";
   const g=islemler.map(t=>[t.tarih,t.varlik,t.tur,t.yon,t.kaldirac,t.giris,t.cikis,t.miktar,t.ucret,t.fonlama,'"'+(t.not||"").replace(/"/g,'""')+'"'].join(",")).join("\n");
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([bas+g],{type:"text/csv"}));a.download="islem-gunlugu.csv";a.click()};

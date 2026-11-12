@@ -279,6 +279,40 @@ test("hepsini sil diğer cihazdan geri gelmiyor", () => {
   assert.deepEqual(b.liste(), []);
 });
 
+test("bulut aynı sayıda ama farklı içerikteyse açılışta güncelleniyor", () => {
+  const z = Date.now();
+  const bulut = { ig_n: "1", ig_0: JSON.stringify([kayit(1), kayit(2)]), ig_sil_n: "1", ig_sil_0: JSON.stringify([["1", z]]) };
+  const yerel = { [ANAHTAR]: JSON.stringify([kayit(2), kayit(3)]), [ANAHTAR + "_silinen"]: JSON.stringify({ 1: z }) };
+  const o = ortamKur({ yerel, bulut });
+  assert.deepEqual(o.liste().map((t) => t.id).sort(), [2, 3]);
+  assert.deepEqual(JSON.parse(bulut.ig_0).map((t) => t.id).sort(), [2, 3], "yereldeki yüklendi, silinen buluttan çıktı");
+});
+
+test("kimliksiz kayıt: tek silme ve hepsini sil diğer cihazdan geri gelmiyor", () => {
+  const { id: _a, ...k1 } = kayit(1), { id: _b, ...k2 } = kayit(2);
+  const ikisi = JSON.stringify([k1, k2]);
+  for (const hepsi of [false, true]) {
+    const bulut = { ig_n: "1", ig_0: ikisi };
+    const yerelB = { [ANAHTAR]: ikisi };
+    const a = ortamKur({ yerel: { [ANAHTAR]: ikisi }, bulut });
+    assert.equal(a.liste().length, 2, "kimliksiz kayıtlar çoğalmadı");
+    if (hepsi) a.el("temizle").onclick();
+    else a.el("liste").onclick({ target: a.el("liste").children.find((tr) => tr.children[0].textContent === "11-01").children[7].children[0] });
+    const kalan = hepsi ? [] : ["2026-11-02"];
+    assert.deepEqual(a.liste().map((t) => t.tarih), kalan);
+    assert.ok(!Object.keys(JSON.parse(a.js("JSON.stringify(silinen)"))).includes("undefined"));
+    const b = ortamKur({ yerel: yerelB, bulut });
+    assert.deepEqual(b.liste().map((t) => t.tarih), kalan, "B cihazında geri gelmedi");
+    assert.deepEqual(JSON.parse(bulut.ig_0).map((t) => t.tarih), kalan, "buluta geri yazılmadı");
+  }
+});
+
+test("CSV'den gelen not 80 karaktere kesiliyor", async () => {
+  const o = ortamKur();
+  await o.dosyaYukle("tarih,varlik,tur,yon,kaldirac,giris,cikis,miktar,ucret,fonlama,not\n2026-11-01,BTC,spot,long,1,100,110,1,0,0," + "a".repeat(200) + "\n");
+  assert.equal(o.liste()[0].not.length, 80);
+});
+
 test("eski bulut kaydı (mezar taşı anahtarı yok, eski alanlar) okunuyor", () => {
   const eski = [{ id: 5, tarih: "2026-10-01", varlik: "SOL", yon: "short", giris: 150, cikis: 140, miktar: 10, ucret: 1, not: "" }];
   const bulut = { ig_n: "1", ig_0: JSON.stringify(eski) };
