@@ -52,6 +52,7 @@ a{color:var(--sari)}
 <div class="kap">
 <h1>📒 İşlem Günlüğü</h1>
 <div class="alt">Spot ve kaldıraçlı işlemlerini gir, kâr zarar ve istatistiklerin anında hesaplansın. Kayıt yok.</div>
+<div class="uyari gizli" id="bozukNot" style="margin-bottom:12px"></div>
 
 <div class="sekme" id="filtre">
 <button data-f="hepsi" class="aktif">Tümü</button>
@@ -122,24 +123,56 @@ Kriptoyu sıfırdan öğrenmek için: <a href="https://dogukanlive.com" target="
 <script>
 const ANAHTAR="islem_gunlugu_v1";
 const duzelt=t=>({kaldirac:1,fonlama:0,...t,tur:t.tur||(t.yon==="short"?"kaldirac":"spot")});
-let islemler=JSON.parse(localStorage.getItem(ANAHTAR)||"[]").map(duzelt);
+const SILINEN_ANAHTAR=ANAHTAR+"_silinen",BOZUK_ANAHTAR=ANAHTAR+"_bozuk",MEZAR_OMRU=365*864e5;
+const iki=n=>String(n).padStart(2,"0");
+const yerelTarih=d=>d.getFullYear()+"-"+iki(d.getMonth()+1)+"-"+iki(d.getDate());
+const bugun=()=>yerelTarih(new Date());
+const varlikTemiz=v=>String(v==null?"":v).toUpperCase().replace(/[^A-Z0-9._\/-]/g,"").slice(0,20)||"?";
+const kayitMi=t=>!!t&&typeof t==="object"&&!Array.isArray(t);
+let yerelKilit=false;
+function bozukYedekle(ham){try{let k=BOZUK_ANAHTAR;const eski=localStorage.getItem(k);if(eski===ham)return true;if(eski!=null)k=BOZUK_ANAHTAR+"_"+Date.now();localStorage.setItem(k,ham);return true}catch(_){return false}}
+function yerelOku(){let ham=null;try{ham=localStorage.getItem(ANAHTAR)}catch(_){return{liste:[],bozuk:false}}
+  if(ham==null||ham==="")return{liste:[],bozuk:false};
+  let v;try{v=JSON.parse(ham)}catch(_){v=undefined}
+  if(Array.isArray(v)&&v.every(kayitMi))return{liste:v.map(duzelt),bozuk:false};
+  if(!bozukYedekle(ham))yerelKilit=true;
+  return{liste:Array.isArray(v)?v.filter(kayitMi).map(duzelt):[],bozuk:true}}
+function mezarTemizle(m){const o={},simdi=Date.now();if(kayitMi(m))for(const k in m){const z=+m[k];if(z>0&&simdi-z<MEZAR_OMRU)o[k]=z}return o}
+function mezarKat(a,b){const o={...a};for(const k in b)if(!(o[k]>=b[k]))o[k]=b[k];return o}
+function silinenOku(){try{return mezarTemizle(JSON.parse(localStorage.getItem(SILINEN_ANAHTAR)||"{}"))}catch(_){return{}}}
+const mezarAnahtar=t=>t.id==null?JSON.stringify(t):String(t.id);
+const anahtarlar=l=>l.map(mezarAnahtar).sort().join("\n");
+function birlestir(yerel,bulut,mezar){const gor={},cik=[];[...yerel,...bulut].forEach(t=>{const k=mezarAnahtar(t);if(gor[k]||mezar[k])return;gor[k]=1;cik.push(t)});return cik}
+function yerelYaz(){try{if(!yerelKilit)localStorage.setItem(ANAHTAR,JSON.stringify(islemler));localStorage.setItem(SILINEN_ANAHTAR,JSON.stringify(silinen))}catch(_){}}
+const ilkOkuma=yerelOku();
+let islemler=ilkOkuma.liste,silinen=silinenOku();
 let filtre="hepsi";
 const TG=window.Telegram&&Telegram.WebApp&&Telegram.WebApp.initData?Telegram.WebApp:null;
 const BULUT=TG&&TG.CloudStorage&&TG.isVersionAtLeast&&TG.isVersionAtLeast("6.9")?TG.CloudStorage:null;
 if(TG){TG.ready();TG.expand();}
 const $=id=>document.getElementById(id);
-const sayi=n=>(Math.round(n*100)/100).toLocaleString("tr-TR",{maximumFractionDigits:2});
-const kz=t=>{if(typeof t.hazirKz==="number")return t.hazirKz-(t.ucret||0);const fark=(t.tur==="kaldirac"&&t.yon==="short")?(t.giris-t.cikis):(t.cikis-t.giris);return fark*t.miktar-(t.ucret||0)-(t.tur==="kaldirac"?(t.fonlama||0):0)};
+const sayi=n=>{n=+n;if(!isFinite(n))return "-";const a=Math.abs(n);if(a<1e-10)return "0";
+  return a>=1?(Math.round(n*100)/100).toLocaleString("tr-TR",{maximumFractionDigits:2}):n.toLocaleString("tr-TR",{maximumSignificantDigits:4})};
+const kzHam=t=>{if(typeof t.hazirKz==="number")return t.hazirKz-(t.ucret||0);const fark=(t.tur==="kaldirac"&&t.yon==="short")?(t.giris-t.cikis):(t.cikis-t.giris);return fark*t.miktar-(t.ucret||0)-(t.tur==="kaldirac"?(t.fonlama||0):0)};
+const kz=t=>{const v=kzHam(t);return isFinite(v)?v:0};
 const yuzde=t=>{const x=t.tur==="kaldirac"?Math.max(1,t.kaldirac||1):1;const teminat=t.giris*t.miktar/x;return teminat>0?kz(t)/teminat*100:0};
-function bulutaYaz(){if(!BULUT)return;const j=JSON.stringify(islemler),p=[];for(let i=0;i<j.length;i+=3800)p.push(j.slice(i,i+3800));
-  BULUT.setItem("ig_n",String(p.length));p.forEach((x,i)=>BULUT.setItem("ig_"+i,x));}
-function buluttanOku(){if(!BULUT)return;BULUT.getItem("ig_n",(e,n)=>{n=+n||0;if(e||!n)return;const k=[...Array(n).keys()].map(i=>"ig_"+i);
-  BULUT.getItems(k,(e2,v)=>{if(e2)return;try{const b=JSON.parse(k.map(x=>v[x]||"").join(""));if(Array.isArray(b)&&b.length>=islemler.length){islemler=b.map(duzelt);localStorage.setItem(ANAHTAR,JSON.stringify(islemler));ciz()}}catch(_){}})})}
-function kaydet(){localStorage.setItem(ANAHTAR,JSON.stringify(islemler));bulutaYaz();ciz()}
+function parcaYaz(on,j){const p=[];for(let i=0;i<j.length;i+=3800)p.push(j.slice(i,i+3800));
+  BULUT.setItem(on+"n",String(p.length));p.forEach((x,i)=>BULUT.setItem(on+i,x));}
+function bulutaYaz(){if(!BULUT)return;parcaYaz("ig_",JSON.stringify(islemler));parcaYaz("ig_sil_",JSON.stringify(Object.entries(silinen)));}
+function buluttanOku(){if(!BULUT)return;BULUT.getItems(["ig_n","ig_sil_n"],(e,s)=>{if(e||!s)return;const n=+s.ig_n||0,m=+s.ig_sil_n||0;if(!n&&!m)return;
+  const k=[...Array(n).keys()].map(i=>"ig_"+i),ks=[...Array(m).keys()].map(i=>"ig_sil_"+i);
+  BULUT.getItems([...k,...ks],(e2,v)=>{if(e2||!v)return;let b=[],bm={};
+    try{if(n){b=JSON.parse(k.map(x=>v[x]||"").join(""));if(!Array.isArray(b))return;b=b.filter(kayitMi)}}catch(_){return}
+    try{if(m)bm=mezarTemizle(Object.fromEntries(JSON.parse(ks.map(x=>v[x]||"").join(""))))}catch(_){bm={}}
+    const bd=b.map(duzelt),yeniMezar=mezarKat(silinen,bm),yeni=birlestir(islemler,bd,yeniMezar);
+    const bulutEski=anahtarlar(yeni)!==anahtarlar(bd)||Object.keys(yeniMezar).sort().join("\n")!==Object.keys(bm).sort().join("\n");
+    islemler=yeni;silinen=yeniMezar;yerelYaz();if(bulutEski)bulutaYaz();ciz()})})}
+function kaydet(){yerelYaz();bulutaYaz();ciz()}
+function ogeYap(ad,metin,sinif){const el=document.createElement(ad);if(metin!=null)el.textContent=metin;if(sinif)el.className=sinif;return el}
 function renk(el,v){el.classList.remove("pos","neg");if(v>0)el.classList.add("pos");if(v<0)el.classList.add("neg")}
 function yaz(id,v){$(id).textContent=sayi(v);renk($(id),v)}
 function ciz(){
-  const tum=[...islemler].sort((a,b)=>a.tarih<b.tarih?-1:a.tarih>b.tarih?1:a.id-b.id);
+  const tum=[...islemler].sort((a,b)=>{const x=String(a.tarih||""),y=String(b.tarih||"");return x<y?-1:x>y?1:(a.id-b.id||0)});
   const sirali=filtre==="hepsi"?tum:tum.filter(t=>t.tur===filtre);
   const sonuc=sirali.map(kz),top=sonuc.reduce((a,b)=>a+b,0);
   const kaz=sonuc.filter(x=>x>0),kay=sonuc.filter(x=>x<0);
@@ -151,18 +184,23 @@ function ciz(){
   $("sOrtK").textContent=kaz.length?sayi(tk/kaz.length):"0";
   $("sOrtZ").textContent=kay.length?sayi(-tz/kay.length):"0";
   if(sonuc.length){let iyi=0,kotu=0;sonuc.forEach((v,i)=>{if(v>sonuc[iyi])iyi=i;if(v<sonuc[kotu])kotu=i});
-    $("sEnIyi").textContent=sirali[iyi].varlik+" "+sayi(sonuc[iyi]);renk($("sEnIyi"),sonuc[iyi]);
-    $("sEnKotu").textContent=sirali[kotu].varlik+" "+sayi(sonuc[kotu]);renk($("sEnKotu"),sonuc[kotu]);
+    $("sEnIyi").textContent=varlikTemiz(sirali[iyi].varlik)+" "+sayi(sonuc[iyi]);renk($("sEnIyi"),sonuc[iyi]);
+    $("sEnKotu").textContent=varlikTemiz(sirali[kotu].varlik)+" "+sayi(sonuc[kotu]);renk($("sEnKotu"),sonuc[kotu]);
   }else{$("sEnIyi").textContent="-";$("sEnKotu").textContent="-";renk($("sEnIyi"),0);renk($("sEnKotu"),0)}
   yaz("sSpot",tum.filter(t=>t.tur==="spot").map(kz).reduce((a,b)=>a+b,0));
   yaz("sKald",tum.filter(t=>t.tur==="kaldirac").map(kz).reduce((a,b)=>a+b,0));
   $("sUcret").textContent=sayi(sirali.reduce((a,t)=>a+(t.ucret||0)+(t.tur==="kaldirac"?Math.max(0,t.fonlama||0):0),0));
   const kl=sirali.filter(t=>t.tur==="kaldirac");$("sOrtX").textContent=kl.length?sayi(kl.reduce((a,t)=>a+(t.kaldirac||1),0)/kl.length)+"x":"-";
   const tb=$("liste");
-  if(!sirali.length){tb.innerHTML='<tr><td colspan="8" class="not">Bu görünümde işlem yok. İşlemini yukarıdan ekle.</td></tr>'}
-  else{tb.innerHTML=[...sirali].reverse().map(t=>{const v=kz(t),p=yuzde(t),c=v>0?"pos":v<0?"neg":"";
-    const et=t.tur==="kaldirac"?`<span class="etiket k">${t.yon==="short"?"S":"L"} ${sayi(t.kaldirac||1)}x</span>`:'<span class="etiket">Spot</span>';
-    return `<tr title="${(t.not||"").replace(/"/g,"&quot;")}"><td>${t.tarih.slice(5)}</td><td>${t.varlik}</td><td>${et}</td><td>${t.giris?sayi(t.giris):"-"}</td><td>${t.cikis?sayi(t.cikis):"-"}</td><td class="${c}">${sayi(v)}</td><td class="${c}">${sayi(p)}</td><td><button class="sil" data-id="${t.id}">✕</button></td></tr>`}).join("")}
+  tb.textContent="";
+  if(!sirali.length){const tr=ogeYap("tr"),td=ogeYap("td","Bu görünümde işlem yok. İşlemini yukarıdan ekle.","not");td.colSpan=8;tr.appendChild(td);tb.appendChild(tr)}
+  else [...sirali].reverse().forEach(t=>{const v=kz(t),p=yuzde(t),c=v>0?"pos":v<0?"neg":"";
+    const tr=ogeYap("tr");tr.title=String(t.not==null?"":t.not);
+    const et=t.tur==="kaldirac"?ogeYap("span",(t.yon==="short"?"S":"L")+" "+sayi(t.kaldirac||1)+"x","etiket k"):ogeYap("span","Spot","etiket");
+    const tdEt=ogeYap("td");tdEt.appendChild(et);
+    const sil=ogeYap("button","✕","sil");sil.dataset.id=mezarAnahtar(t);const tdSil=ogeYap("td");tdSil.appendChild(sil);
+    tr.append(ogeYap("td",String(t.tarih||"").slice(5)),ogeYap("td",varlikTemiz(t.varlik)),tdEt,ogeYap("td",t.giris?sayi(t.giris):"-"),ogeYap("td",t.cikis?sayi(t.cikis):"-"),ogeYap("td",sayi(v),c),ogeYap("td",sayi(p),c),tdSil);
+    tb.appendChild(tr)});
   grafik(sonuc);
 }
 function grafik(sonuc){
@@ -178,15 +216,15 @@ function grafik(sonuc){
 function turGoster(){const k=$("tur").value==="kaldirac";document.querySelectorAll(".kald").forEach(e=>e.classList.toggle("gizli",!k))}
 $("tur").onchange=turGoster;
 $("filtre").onclick=e=>{const f=e.target.dataset.f;if(!f)return;filtre=f;document.querySelectorAll("#filtre button").forEach(b=>b.classList.toggle("aktif",b.dataset.f===f));ciz()};
-$("tarih").value=new Date().toISOString().slice(0,10);
+$("tarih").value=bugun();
 $("form").onsubmit=e=>{e.preventDefault();const tur=$("tur").value;
-  islemler.push({id:Date.now(),tarih:$("tarih").value,varlik:$("varlik").value.trim().toUpperCase(),tur,
+  islemler.push({id:Date.now(),tarih:$("tarih").value,varlik:varlikTemiz($("varlik").value),tur,
     yon:tur==="kaldirac"?$("yon").value:"long",kaldirac:tur==="kaldirac"?Math.max(1,+$("kaldirac").value||1):1,
     giris:+$("giris").value,cikis:+$("cikis").value,miktar:+$("miktar").value,ucret:+$("ucret").value||0,
     fonlama:tur==="kaldirac"?(+$("fonlama").value||0):0,not:$("not").value.trim()});
   ["giris","cikis","miktar","not"].forEach(k=>$(k).value="");$("ucret").value=0;$("fonlama").value=0;kaydet()};
-$("liste").onclick=e=>{const id=e.target.dataset.id;if(id&&confirm("Bu işlem silinsin mi?")){islemler=islemler.filter(t=>String(t.id)!==id);kaydet()}};
-$("temizle").onclick=()=>{if(islemler.length&&confirm("Tüm işlemler silinsin mi? Önce CSV indirmen önerilir.")){islemler=[];kaydet()}};
+$("liste").onclick=e=>{const id=e.target.dataset.id;if(id&&confirm("Bu işlem silinsin mi?")){islemler=islemler.filter(t=>mezarAnahtar(t)!==id);silinen[id]=Date.now();kaydet()}};
+$("temizle").onclick=()=>{if(islemler.length&&confirm("Tüm işlemler silinsin mi? Önce CSV indirmen önerilir.")){const z=Date.now();islemler.forEach(t=>{silinen[mezarAnahtar(t)]=z});islemler=[];kaydet()}};
 $("indir").onclick=()=>{const bas="tarih,varlik,tur,yon,kaldirac,giris,cikis,miktar,ucret,fonlama,not\n";
   const g=islemler.map(t=>[t.tarih,t.varlik,t.tur,t.yon,t.kaldirac,t.giris,t.cikis,t.miktar,t.ucret,t.fonlama,'"'+(t.not||"").replace(/"/g,'""')+'"'].join(",")).join("\n");
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([bas+g],{type:"text/csv"}));a.download="islem-gunlugu.csv";a.click()};
@@ -211,15 +249,15 @@ const anah=s=>String(s||"").toLowerCase().replace(/ı/g,"i").replace(/ç/g,"c").
 function bul(o,...adlar){for(const a of adlar){for(const k in o)if(k===a)return o[k]}for(const a of adlar){for(const k in o)if(k.startsWith(a))return o[k]}return undefined}
 function tarihOku(v){const s=String(v||"").trim();let m=s.match(/(\d{4})-(\d{2})-(\d{2})/);if(m)return m[0];
   m=s.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);if(m)return m[3]+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");
-  const d=new Date(s);return isNaN(d)?new Date().toISOString().slice(0,10):d.toISOString().slice(0,10)}
-function varlikOku(v){return String(v||"").toUpperCase().replace(/[-_/ ]/g,"").replace(/(USDT|USDC|BUSD|FDUSD|TRY|USD|EUR)$/,"")||"?"}
+  const d=new Date(s);return isNaN(d)?bugun():yerelTarih(d)}
+function varlikOku(v){return varlikTemiz(String(v||"").toUpperCase().replace(/[-_/ ]/g,"").replace(/(USDT|USDC|BUSD|FDUSD|TRY|USD|EUR)$/,""))}
 function iceAktar(metin){
   const r=csvOku(metin);if(r.length<2)return{n:0,bas:r[0]||[]};
   const bas=r[0].map(anah),veri=r.slice(1).map(x=>{const o={};bas.forEach((b,j)=>o[b]=x[j]);return o});const yeni=[];let id=Date.now();
   if(bas.includes("giris")&&bas.includes("cikis")){
-    veri.forEach(o=>{const t=duzelt({id:id++,tarih:tarihOku(o.tarih),varlik:(o.varlik||"").toUpperCase(),tur:o.tur==="kaldirac"?"kaldirac":(o.tur?"spot":undefined),
+    veri.forEach(o=>{const t=duzelt({id:id++,tarih:tarihOku(o.tarih),varlik:varlikTemiz(o.varlik),tur:o.tur==="kaldirac"?"kaldirac":(o.tur?"spot":undefined),
       yon:o.yon==="short"?"short":"long",kaldirac:Math.max(1,sayiOku(o.kaldirac)||1),giris:sayiOku(o.giris),cikis:sayiOku(o.cikis),miktar:sayiOku(o.miktar),
-      ucret:sayiOku(o.ucret)||0,fonlama:sayiOku(o.fonlama)||0,not:o.not||""});
+      ucret:sayiOku(o.ucret)||0,fonlama:sayiOku(o.fonlama)||0,not:String(o.not||"").slice(0,80)});
       if(t.tur==="spot"){t.yon="long";t.kaldirac=1;t.fonlama=0}
       if(!isNaN(t.giris)&&!isNaN(t.cikis)&&!isNaN(t.miktar))yeni.push(t)});
     return{n:yeni.length,yeni,tip:"İşlem Günlüğü"}}
@@ -266,6 +304,7 @@ $("yukle").onchange=async e=>{const f=e.target.files[0];if(!f)return;let metin;
   else if(s.tip)alert("Dosya tanındı ("+s.tip+"), "+(s.okunan||0)+" satır okundu ama kapanmış işlem yok."+(s.acik&&s.acik.length?"\nAçık pozisyonlar (henüz satılmamış): "+s.acik.join(", "):"")+"\n\nKâr zararı hesaplamak için alış ve satışın ikisinin de dosyada olması gerekir. Daha uzun bir tarih aralığı seçip tekrar indir.");
   else alert("Dosyada işlem bulunamadı.\nBulunan sütunlar: "+(s.bas||[]).join(", ")+"\n\nDesteklenen: bu sayfanın CSV'si, Binance/OKX/Bybit/MEXC (CSV ya da Excel) spot işlem geçmişi (Tarih, Parite, Yön, Fiyat, Miktar) ve vadeli işlem geçmişi (Realized Profit / Gerçekleşen K/Z sütunu).");
   e.target.value=""};
+if(ilkOkuma.bozuk){const n=$("bozukNot");n.textContent=yerelKilit?"Bu cihazdaki eski kayıt okunamadı ve yedeği alınamadı. Eski veri silinmedi. Yeni işlemlerin bu cihazda saklanmayabilir, CSV indirerek yedekle.":"Bu cihazdaki eski kayıt okunamadı. Eski veri silinmedi, ayrı bir yere yedeklendi. Yeni işlemlerini eklemeye devam edebilirsin.";n.classList.remove("gizli")}
 turGoster();ciz();buluttanOku();
 </script>
 </body>
